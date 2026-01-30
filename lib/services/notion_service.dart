@@ -5,7 +5,12 @@ class NotionService {
   final String token;
 
   // 使用本地代理服务器
-  final String baseUrl = 'http://localhost:3001/notion';
+  // Web 版本需要代理服务器解决 CORS 问题
+  // 生产环境应该部署到同源域名或使用环境变量配置
+  final String baseUrl = const String.fromEnvironment(
+    'PROXY_URL',
+    defaultValue: 'http://localhost:3001/notion',
+  );
 
   NotionService(this.token);
 
@@ -303,6 +308,64 @@ class NotionService {
 
     if (response.statusCode != 200) {
       throw Exception('同步失败: ${response.statusCode}');
+    }
+  }
+
+  /// 测试代理服务器连接
+  Future<Map<String, dynamic>> testConnection() async {
+    try {
+      // 测试代理服务器健康检查
+      final healthResponse = await http.get(
+        Uri.parse(baseUrl.replaceAll('/notion', '/health')),
+      ).timeout(const Duration(seconds: 5));
+
+      if (healthResponse.statusCode != 200) {
+        return {
+          'success': false,
+          'message': '代理服务器未响应',
+          'details': '请确保代理服务器已启动: cd server && npm start',
+        };
+      }
+
+      // 测试 Notion API 连接
+      final notionResponse = await http.get(
+        Uri.parse('$baseUrl/users/me'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Notion-Version': '2022-06-28',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (notionResponse.statusCode == 200) {
+        final data = jsonDecode(notionResponse.body);
+        final actualData = data['contents'] != null
+            ? jsonDecode(data['contents'])
+            : data;
+
+        return {
+          'success': true,
+          'message': '连接成功',
+          'user': actualData['name'] ?? 'Unknown',
+        };
+      } else if (notionResponse.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'Token 无效',
+          'details': '请检查 Integration Token 是否正确',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Notion API 错误',
+          'details': '状态码: ${notionResponse.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': '连接失败',
+        'details': e.toString(),
+      };
     }
   }
 }
