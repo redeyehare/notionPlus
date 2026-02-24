@@ -10,6 +10,7 @@ https://plotly.com/python/  图表
 quarto 嵌入Jupyter
 
 笔记
+https://editorjs.io/
 
 md编辑器
 流程图
